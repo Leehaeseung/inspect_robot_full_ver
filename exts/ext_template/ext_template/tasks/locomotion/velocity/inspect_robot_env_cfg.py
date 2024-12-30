@@ -6,7 +6,7 @@ from omni.isaac.lab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg, Colli
 from omni.isaac.lab.assets import RigidObjectCfg
 
 import omni.isaac.lab.sim as sim_utils
-from omni.isaac.lab.assets import ArticulationCfg, AssetBaseCfg
+from omni.isaac.lab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
 from omni.isaac.lab.envs import ManagerBasedRLEnvCfg
 from omni.isaac.lab.managers import CurriculumTermCfg as CurrTerm
 from omni.isaac.lab.managers import EventTermCfg as EventTerm
@@ -42,19 +42,19 @@ class InspectRobotbaseSceneCfg(InteractiveSceneCfg):
     robot: ArticulationCfg = INSPECT_ROBOT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
     # duct
-    duct_up = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/Duct",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0,0,0], rot=[-0.7071,0,0,0.7071]),
-        spawn=UsdFileCfg(usd_path="/home/ubuntu/IsaacLabExtensionTemplate/exts/ext_template/ext_template/tasks/locomotion/velocity/config/duct_inspect_wtf/asset/damper.usd",
+    duct = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/duct",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=[-0.2,0,-0.072], rot=[-0.7071,0,0,0.7071]),
+        spawn=UsdFileCfg(usd_path="/home/ubuntu/IsaacLabExtensionTemplate/exts/ext_template/ext_template/tasks/locomotion/velocity/config/duct_inspect_wtf/asset/damper_winded.usd",
                          scale=(0.01,0.01,0.01),
-                         activate_contact_sensors=True,
+                         activate_contact_sensors=False,
                          rigid_props=RigidBodyPropertiesCfg(
                             rigid_body_enabled=True,
                             solver_position_iteration_count=16,
-                            solver_velocity_iteration_count=1,
+                            solver_velocity_iteration_count=0,
                             max_angular_velocity=0,
                             max_linear_velocity=0,
-                            max_depenetration_velocity=0.1,
+                            max_depenetration_velocity=1.0,
                             disable_gravity=True),
 
                          )
@@ -62,10 +62,10 @@ class InspectRobotbaseSceneCfg(InteractiveSceneCfg):
     
 
     #충돌센서(ductside에만 붙일거임)
-    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/base_link",
-                                      filter_prim_paths_expr=["{ENV_REGEX_NS}/Robot"],
-                                      force_threshold = 0.5,
-                                      track_air_time=True)
+    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*",
+                                      filter_prim_paths_expr=["{ENV_REGEX_NS}/duct"],
+                                      track_air_time=True,
+                                      debug_vis=True)
 
     # # lights
     # light = AssetBaseCfg(
@@ -94,7 +94,7 @@ class CommandsCfg:
         asset_name="robot",
         simple_heading=False,
         resampling_time_range=(15.0,15.0),
-        debug_vis=True,
+        debug_vis=False,
         ranges=mdp.UniformPose2dCommandCfg.Ranges(
             pos_x=(2.0,2.0), pos_y=(0.0,0.0), heading=(0,0)#rad
         )
@@ -103,7 +103,7 @@ class CommandsCfg:
 @configclass
 class ActionsCfg:
     """Action specifications for the MDP."""
-    wheel_velocity=mdp.JointVelocityActionCfg(asset_name="robot",joint_names=["rb_wheel", "lb_wheel"],scale=1.0,use_default_offset=False)
+    wheel_velocity=mdp.JointVelocityActionCfg(asset_name="robot",joint_names=["rb_joint", "lb_joint"],scale=1.0,use_default_offset=False)
     
 
 
@@ -137,9 +137,9 @@ class EventCfg:
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"yaw":(-0.3,0.3)},
+            "pose_range": {"yaw":(4.612,4.812)},
             "velocity_range": {},
-            "asset_cfg": SceneEntityCfg("robot", body_names="base_link"),
+            "asset_cfg": SceneEntityCfg("robot")
         }
     )
 
@@ -161,15 +161,25 @@ class RewardsCfg:
     # action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
     undesired_contacts = RewTerm(
         func=mdp.undesired_contacts,
-        weight=-10.0,
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base_link"), "threshold": 0.3},
+        weight=-2.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base_link"), "threshold": 1.0},
     )
     
-    orientation_tracking = RewTerm(
-        func=mdp.heading_command_error_abs,
-        weight=2.0,
-        params={"command_name": "base_position","std":0.05*math.pi},
-    )#완
+    reach_goal= RewTerm(
+        func=mdp.reach_goal_reward,
+        weight=1.0,
+        params={"command_name":"base_position","threshold": 0.1},
+    )
+    time_out=RewTerm(
+        func=mdp.time_out_penalty,
+        weight=-1.5,
+        )
+    
+    # orientation_tracking = RewTerm(
+    #     func=mdp.heading_command_error_abs,
+    #     weight=2.0,
+    #     params={"command_name": "base_position","std":0.05*math.pi},
+    # )#완
     
     # position_tracking_fine_grained = RewTerm(
     # func=mdp.position_command_error_tanh,
@@ -193,28 +203,28 @@ class RewardsCfg:
     position_tracking_fine_grained_0_8 = RewTerm(
         func=mdp.position_command_error_tanh_x,
         weight=1.0,  # 중간 가중치로 학습 안정화
-        params={"std": 0.8, "command_name": "base_position"},
+        params={"std": 1.0, "command_name": "base_position"},
     )#완
     
     #y축 중간으로
-    position_tracking_fine_grained_0_8_y = RewTerm(
-        func=mdp.position_command_error_tanh_y,
-        weight=2.0,  # 중간 가중치로 학습 안정화
-        params={"std": 0.01, "command_name": "base_position"},
-    )#완
+    # position_tracking_fine_grained_0_8_y = RewTerm(
+    #     func=mdp.position_command_error_tanh_y,
+    #     weight=1.0,  # 중간 가중치로 학습 안정화
+    #     params={"std": 0.03, "command_name": "base_position"},
+    # )#완
 
-    # # 목표 근처 정밀 제어 (작은 std, 높은 weight)
-    # position_tracking_fine_grained_0_4 = RewTerm(
-    #     func=mdp.position_command_error_tanh,
-    #     weight=0.7,  # 정밀 제어에 적당한 가중치
-    #     params={"std": 0.4, "command_name": "base_position"},
-    # )
+    # 목표 근처 정밀 제어 (작은 std, 높은 weight)
+    position_tracking_fine_grained_0_4 = RewTerm(
+        func=mdp.position_command_error_tanh_x,
+        weight=0.9,  # 정밀 제어에 적당한 가중치
+        params={"std": 0.8, "command_name": "base_position"},
+    )
 
-    # position_tracking_fine_grained_0_2 = RewTerm(
-    #     func=mdp.position_command_error_tanh,
-    #     weight=0.9,  # 높은 가중치로 정밀 제어 강화
-    #     params={"std": 0.2, "command_name": "base_position"},
-    # )
+    position_tracking_fine_grained_0_2 = RewTerm(
+        func=mdp.position_command_error_tanh_x,
+        weight=0.7,  # 높은 가중치로 정밀 제어 강화
+        params={"std": 0.5, "command_name": "base_position"},
+    )
 
     
 
@@ -231,11 +241,12 @@ class TerminationsCfg:
     
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
     
+    reach_goal=DoneTerm(func=mdp.reach_goal_termination, params={"command_name":"base_position","threshold": 0.1})
         
     base_contact = DoneTerm(
         func=mdp.illegal_contact,
         
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="damper_side"), "threshold": 0.5},
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base_link"), "threshold": 1.0},
 
     )
     # 도착했을때 상점주면서 집 보내기
@@ -256,7 +267,7 @@ class TerminationsCfg:
 
 @configclass
 class InspectRobotDuctEnvCfg(ManagerBasedRLEnvCfg):    
-    scene: InspectRobotbaseSceneCfg = InspectRobotbaseSceneCfg(num_envs=16, env_spacing=4)
+    scene: InspectRobotbaseSceneCfg = InspectRobotbaseSceneCfg(num_envs=64, env_spacing=4)
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
     commands: CommandsCfg = CommandsCfg()
@@ -269,7 +280,7 @@ class InspectRobotDuctEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
         # general settings
         self.decimation = 4
-        self.episode_length_s = 15.0
+        self.episode_length_s = 8.0
         # simulation settings
         self.sim.dt = 0.005
         self.sim.render_interval = self.decimation
