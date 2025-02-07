@@ -89,7 +89,7 @@ def reach_goal_reward(
     des_pos_b=command[:,:3]
     des_pos_w, _ = combine_frame_transforms(robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], des_pos_b)
     pos_x_error = torch.square(des_pos_w[:,0] - robot.data.root_pos_w[:, 0])
-    return (pos_x_error<threshold)*(env.max_episode_length- env.episode_length_buf)
+    return (pos_x_error<threshold)
 
 
 
@@ -129,6 +129,25 @@ def position_command_error_tanh_x(env: ManagerBasedRLEnv,
     des_pos_w, _ = combine_frame_transforms(robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], des_pos_b)
     distance = (des_pos_w[:,0] - cur_pos_x).abs()  
     return 1 - torch.tanh(distance / std)
+
+def position_command_error_linear_x(env: ManagerBasedRLEnv,
+                                  std: float,
+                                  command_name: str,
+                                  robot_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+                                  ) -> torch.Tensor:
+    """Reward position tracking with tanh kernel."""
+    robot:RigidObject=env.scene[robot_cfg.name]    # compute the error
+    command = env.command_manager.get_command(command_name)
+    # des_pos_b = command[:, 0]
+    # distance = torch.norm(des_pos_b-robot.data.root_pos_w[:,0], dim=1)
+    # des_pos_b = command[:, 0]  
+    cur_pos_x = robot.data.root_pos_w[:, 0]  
+    des_pos_b=command[:,:3]
+    des_pos_w, _ = combine_frame_transforms(robot.data.root_state_w[:, :3], robot.data.root_state_w[:, 3:7], des_pos_b)
+    distance = (des_pos_w[:,0] - cur_pos_x).abs()  
+    return 1 - (distance / std)
+
+
 
 def position_command_error_tanh_y(env: ManagerBasedRLEnv,
                                   std: float,

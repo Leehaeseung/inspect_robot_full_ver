@@ -14,17 +14,17 @@ class InspectRGBPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     experiment_name = "InspectRobot"
     empirical_normalization = False
     policy = RslRlPpoActorCriticCfg(
-        init_noise_std=1.0,
-        actor_hidden_dims=[32,32],
-        critic_hidden_dims=[32,32],
+        init_noise_std=0.2,
+        actor_hidden_dims=[128,128,64],
+        critic_hidden_dims=[128,128,64],
         activation="elu",
     )
     algorithm = RslRlPpoAlgorithmCfg(
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
-        clip_param=0.2,
-        entropy_coef=0.005,
-        num_learning_epochs=25,
+        clip_param=0.25,
+        entropy_coef=0.01,
+        num_learning_epochs=10,
         num_mini_batches=4,
         learning_rate=1.0e-2,
         schedule="adaptive",
