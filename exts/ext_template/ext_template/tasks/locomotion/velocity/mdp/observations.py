@@ -77,7 +77,7 @@ def image_gray(
         print("\n🖥️ Contour Detection (ASCII View)\n" + "="*40)
 
         ascii_chars = ['.', '#']  
-        resized = cv2.resize(stacked_frames[0, -1], (80, 30))  
+        resized = cv2.resize(stacked_frames[0, -1], (80, 80))  
         ascii_img = '\n'.join(
             ''.join(ascii_chars[1] if pixel > 0 else ascii_chars[0] for pixel in row)
             for row in resized
