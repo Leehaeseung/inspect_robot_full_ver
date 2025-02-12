@@ -104,7 +104,7 @@ class CommandsCfg:
 @configclass
 class ActionsCfg:
     """Action specifications for the MDP."""
-    wheel_velocity=mdp.JointVelocityActionCfg(asset_name="robot",joint_names=["rb_joint", "lb_joint"],scale=1.0,use_default_offset=False)
+    wheel_velocity=mdp.JointVelocityActionCfg(asset_name="robot",joint_names=["rb_joint", "lb_joint"],scale=1.0,use_default_offset=True)
     
 
 
@@ -118,9 +118,9 @@ class ObservationsCfg:
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
    
-        image = ObsTerm(func=mdp.image_gray, params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "rgb"})
-        actions = ObsTerm(func=mdp.last_action)
-        joint_vel = ObsTerm(func=mdp.joint_vel)
+        image = ObsTerm(func=mdp.image_contour_debug, params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "rgb"})
+        actions = ObsTerm(func=mdp.last_action_debug)
+        joint_vel = ObsTerm(func=mdp.joint_vel_debug)
 
         def __post_init__(self):
             self.enable_corruption = True
@@ -172,20 +172,10 @@ class EventCfg:
 
 @configclass
 class RewardsCfg:
-    # track_lin_vel_xy_exp = RewTerm(
-    #     func=mdp.track_lin_vel_xy_exp,# track_ang_vel_z_exp = RewTerm(
-    #     func=mdp.track_ang_vel_z_exp, weight=0.5, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
-    # )
-    # lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
-    # ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
-    # weight=1.0, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
-    # )
-    # dof_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-5)
-    # dof_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
-    # action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
+
     undesired_contacts = RewTerm(
         func=mdp.undesired_contacts,
-        weight=-3.0,
+        weight=-30.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base_link"), "threshold": 1.0},
     )
     
@@ -194,6 +184,7 @@ class RewardsCfg:
         weight=1.0,        
         params={"command_name":"base_position","threshold": 0.1},
     )
+
     time_out=RewTerm(
         func=mdp.time_out_penalty,
         weight=-1.0,
@@ -203,7 +194,15 @@ class RewardsCfg:
         weight=3.0,  # 높은 가중치로 초기 탐색 지원
         params={"std": 2.0, "command_name": "base_position"},
     )
-    
+    dof_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-10)
+    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
+    velocity_penalty = RewTerm(func=mdp.velocity_penalty,weight=-0.1)#현재 바퀴 속도가 6.28rad/s 이상이면 페널티
+    action_penalty=RewTerm(func=mdp.vel_action_penalty,weight=-0.1)#신경망의 출력이  6.28이상이면 페널티
+    robot_dropping = RewTerm(
+        func=mdp.root_height_below_minimum_penalty,
+        weight=-10.0,
+        params={"minimum_height": -0.5,"asset_cfg": SceneEntityCfg("robot")}
+    )
     # orientation_tracking = RewTerm(
     #     func=mdp.heading_command_error_abs,
     #     weight=2.0,
@@ -273,7 +272,7 @@ class RewardsCfg:
 class TerminationsCfg:
     """Termination terms for the MDP."""
     robot_dropping = DoneTerm(
-        func=mdp.root_X_below_minimum, params={"minimum_height": -2.0,"asset_cfg": SceneEntityCfg("robot")}
+        func=mdp.root_X_below_minimum, params={"minimum_height": -0.5,"asset_cfg": SceneEntityCfg("robot")}
     )
     
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
@@ -290,19 +289,19 @@ class TerminationsCfg:
     
     
     
-# @configclass
-# class CurriculumCfg:
-#     """Curriculum terms for the MDP."""
+@configclass
+class CurriculumCfg:
+    """Curriculum terms for the MDP."""
 
-#     contact_rate1 = CurrTerm(
-#         func=mdp.modify_reward_weight, params={"term_name": "undesired_contacts", "weight": -10.0, "num_steps": 1500}
-#     )
-#     contact_rate2 = CurrTerm(
-#         func=mdp.modify_reward_weight, params={"term_name": "undesired_contacts", "weight": -15.0, "num_steps": 3000}
-#     )
-#     goal_rate = CurrTerm(
-#     func=mdp.modify_reward_weight, params={"term_name": "time_out", "weight": -5.0 , "num_steps": 1000}
-#     )
+    contact_rate1 = CurrTerm(
+        func=mdp.modify_reward_weight, params={"term_name": "undesired_contacts", "weight": -100.0, "num_steps": 2000}
+    )
+    contact_rate2 = CurrTerm(
+        func=mdp.modify_reward_weight, params={"term_name": "undesired_contacts", "weight": -300.0, "num_steps": 4000}
+    )
+    goal_rate = CurrTerm(
+    func=mdp.modify_reward_weight, params={"term_name": "time_out", "weight": -5.0 , "num_steps": 1000}
+    )
 
 
 

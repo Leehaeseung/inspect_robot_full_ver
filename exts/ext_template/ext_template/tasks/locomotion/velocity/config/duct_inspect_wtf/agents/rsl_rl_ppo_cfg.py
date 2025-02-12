@@ -10,13 +10,13 @@ from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import (
 class InspectRGBPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 64
     max_iterations = 50000
-    save_interval = 50
+    save_interval = 500
     experiment_name = "InspectRobot"
     empirical_normalization = False
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=0.2,
-        actor_hidden_dims=[128,128,64],
-        critic_hidden_dims=[128,128,64],
+        actor_hidden_dims=[4096,1024,256,64,16],
+        critic_hidden_dims=[4096,1024,256,64,16],
         activation="elu",
     )
     algorithm = RslRlPpoAlgorithmCfg(

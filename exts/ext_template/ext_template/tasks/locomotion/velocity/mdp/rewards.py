@@ -4,7 +4,7 @@ import torch
 from typing import TYPE_CHECKING
 
 
-from omni.isaac.lab.assets import RigidObject
+from omni.isaac.lab.assets import RigidObject,Articulation
 from omni.isaac.lab.managers import SceneEntityCfg
 from omni.isaac.lab.utils.math import combine_frame_transforms
 from omni.isaac.lab.managers import SceneEntityCfg
@@ -74,7 +74,8 @@ def track_pos_x_exp(
 
 
 def time_out_penalty(
-    env: ManagerBasedRLEnv ):
+    env: ManagerBasedRLEnv 
+    ):
     
     return env.episode_length_buf >= env.max_episode_length-0.1
 
@@ -211,3 +212,34 @@ def orientation_tracking(
     asset: RigidObject = env.scene[asset_cfg.name]
     
     return 1- torch.tanh(torch.acos(-asset.data.projected_gravity_b[:, 2]).abs()/std)
+
+
+def joint_torques_l2_only_inspect_robot(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Penalize joint torques applied on the articulation using L2 squared kernel.
+
+    NOTE: Only the joints configured in :attr:`asset_cfg.joint_ids` will have their joint torques contribute to the term.
+    """
+    # extract the used quantities (to enable type-hinting)
+    asset: Articulation = env.scene[asset_cfg.name]
+    return torch.sum(torch.square(asset.data.applied_torque[:, [0,1,4,5]]), dim=1)
+
+
+def root_height_below_minimum_penalty(
+    env: ManagerBasedRLEnv, minimum_height: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """Terminate when the asset's root height is below the minimum height.
+
+    Note:
+        This is currently only supported for flat terrains, i.e. the minimum height is in the world frame.
+    """
+    # extract the used quantities (to enable type-hinting)
+    asset: RigidObject = env.scene[asset_cfg.name]
+    return (asset.data.root_pos_w[:, 2] < minimum_height)
+
+def velocity_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
+    asset: Articulation = env.scene[asset_cfg.name]
+    return torch.where(torch.abs(asset.data.joint_vel[:, [0,1,4,5]]) > 6.28, torch.square(asset.data.joint_vel[:, [0,1,4,5]]), 0.0).max(dim=1)[0]
+
+def vel_action_penalty(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")):
+    asset: Articulation = env.scene[asset_cfg.name]
+    return torch.where(torch.abs(env.action_manager.action[:, [0,1]]) > 6.28, torch.square(env.action_manager.action[:, [0,1]]), 0.0).max(dim=1)[0]
